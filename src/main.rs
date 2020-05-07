@@ -14,6 +14,7 @@ fn main() {
     print_status(&program_state);
 }
 
+// Derive and store win counts, pass appropriate values to print_strat_status
 fn print_status(program_state: &ProgState) {
     println!("Tested {} of {} iterations", program_state.iterations_performed, program_state.iterations);
     let stay_wins = program_state.stay_wins;
@@ -30,33 +31,36 @@ fn print_status(program_state: &ProgState) {
     }
 }
 
+// Make result interpretation pretty
 fn print_strat_status(strategy_string: &str, wins: u128, iterations: u128) {
     let winpercent = 100.0 * ((wins as f64)/(iterations as f64));
     println!("\t{} wins {} times (win rate: {}%)",strategy_string, wins, winpercent);
 }
 
+// so the cheeseball logic here is this:
+// If initial contestant pick is the car door (1 in three chance), staying wins
+// If initial contestant pick is NOT car door (2 in three chance), switching wins
+// Which door is opened is pretty inconsequential unless detailed logging, so don't do it
+// until we need to
 fn iterate(program_state: &mut ProgState) {
     let mut rng = rand::thread_rng();
     let mut now = Instant::now();
-    while program_state.iterations_performed < program_state.iterations {
-        program_state.iterations_performed = program_state.iterations_performed + 1;
-        let mut goat_doors = vec![0, 1, 2];
+    while program_state.needs_another_iteration() {
         let car_door = rng.gen_range(0,3);
-        goat_doors.remove(car_door);
         let contestant_door = rng.gen_range(0,3);
-
-        let open_door;
-        if contestant_door == goat_doors[0] {
-            open_door = goat_doors[1];
-        } else if contestant_door == goat_doors[1] {
-            open_door = goat_doors[0];
-        } else {
-            //contestant door isn't a goat door.  Means it wins on stay
-            program_state.stay_wins = program_state.stay_wins + 1;
-            open_door = goat_doors[rng.gen_range(0,2)];
-        }
+        program_state.result_completed(car_door == contestant_door);
 
         if program_state.logging {
+            let mut goat_doors = vec![0, 1, 2];
+            goat_doors.remove(car_door);
+            let open_door;
+            if contestant_door == goat_doors[0] {
+                open_door = goat_doors[1];
+            } else if contestant_door == goat_doors[1] {
+                open_door = goat_doors[0];
+            } else {
+                open_door = rng.gen_range(0, goat_doors.len());
+            }
             println!("Test {} of {}:\n\tCar behind {}, Goats behind {} and {}\n\t\
                      Contestant Chooses {}\n\t\
                      Monty Opens {} and reveals a goat", 
@@ -74,6 +78,10 @@ fn iterate(program_state: &mut ProgState) {
     }
 }
 
+// we want to store the target iterations and the ongoing iterations actually performed.
+// Since, on any given iterations, staying will win or switching will win (never both lose), only
+// track stay win (arbitrary choice). Store cmd line logging option. 
+// Finally, store strategy for iterpreting results based on stay_wins and printing
 struct ProgState {
     iterations: u128,
     iterations_performed: u128,
@@ -125,4 +133,14 @@ impl ProgState {
             Strategy:\tChoose between STAY, SWTICH, or BOTH\n\t \
             Logging:\tOptional.  Enter DEBUGLOG to enable"
     }
+    fn result_completed(&mut self, staywin: bool) {
+        self.iterations_performed = self.iterations_performed + 1;
+        if staywin {
+            self.stay_wins = self.stay_wins + 1;
+        }
+    }
+    fn needs_another_iteration(&self) -> bool {
+        self.iterations_performed < self.iterations
+    }
+
 }
